@@ -9,8 +9,7 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic") # TODO: -Werror
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
 
-# Add raylib
-include_directories(${PROJECT_SOURCE_DIR}/raylib/include)
+include_directories(${PROJECT_SOURCE_DIR}/raylib/include ${PROJECT_SOURCE_DIR}/include)
 link_directories(${PROJECT_SOURCE_DIR}/raylib/lib)
 
 # Add your sources here
@@ -18,11 +17,9 @@ set(SOURCES src/main.cpp)
 
 # Add executable
 add_executable(${PROJECT_NAME} ${SOURCES})
-add_executable(raysin src/raysin.cpp)
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} PkgConfig::PORTAUDIO)
-target_link_libraries(raysin raylib)
+target_link_libraries(${PROJECT_NAME} PkgConfig::PORTAUDIO raylib)
 
 # Set LD_LIBRARY_PATH
 set_target_properties(${PROJECT_NAME} 
