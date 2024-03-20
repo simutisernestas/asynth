@@ -1,3 +1,6 @@
+#ifndef APLAY_IMLEMENTATION
+#define APLAY_IMLEMENTATION
+
 #include <cstdio>
 #include <cmath>
 #include <array>
@@ -18,6 +21,8 @@ struct WaveForm
     }
 };
 
+// TODO: for inspiration
+// https://github.com/OneLoneCoder/synth/blob/b3c4852b6fad247a4f60cebc9fc3f4014b152d51/main3a.cpp#L165
 struct Envelope
 {
     // create exponential decay envelope
@@ -26,18 +31,19 @@ struct Envelope
     // https://blog.native-instruments.com/music-synthesis-101/
 
     // ADSR times in [s]
-    float attack;
-    float decay;
-    float sustain;
-    float release;
+    float attack_t;
+    float decay_t;
+    float sustain_t;
+    float release_t;
     PaTime t0;
     PaTime t1;
     bool periodic;
+    float sustain_amp;
 
     Envelope(float attack, float decay, float sustain, float release, PaTime t0,
-             bool periodic = false)
-        : attack(attack), decay(decay), sustain(sustain), release(release), t0(t0),
-          periodic(periodic)
+             bool periodic = false, float sustain_amp = .5f)
+        : attack_t(attack), decay_t(decay), sustain_t(sustain), release_t(release), t0(t0),
+          periodic(periodic), sustain_amp(sustain_amp)
     {
         t1 = t0 + attack + decay + sustain + release;
     }
@@ -47,25 +53,26 @@ struct Envelope
         if (t0 < 0)
         {
             t0 = time;
-            t1 = time + attack + decay + sustain + release;
+            t1 = time + attack_t + decay_t + sustain_t + release_t;
         }
 
         PaTime dtime = time - t0;
 
         float envelope = 0.0f;
-        if (dtime < attack)
-            envelope = dtime / attack;
-        else if (dtime < attack + decay)
-            envelope = 1.0 - (1.0 - sustain) * (dtime - attack) / decay;
-        else if (dtime < attack + decay + sustain)
-            envelope = sustain;
-        else if (dtime < attack + decay + sustain + release)
-            envelope = sustain - sustain * (dtime - attack - decay - sustain) / release;
+        if (dtime < attack_t)
+            envelope = dtime / attack_t;
+        else if (dtime < attack_t + decay_t)
+            envelope = 1.0 - (1.0 - sustain_amp) * (dtime - attack_t) / decay_t;
+        else if (dtime < attack_t + decay_t + sustain_t)
+            envelope = sustain_amp;
+        else if (dtime < attack_t + decay_t + sustain_t + release_t)
+            envelope =
+                sustain_amp - sustain_amp * (dtime - attack_t - decay_t - sustain_t) / release_t;
 
         if (periodic && envelope == 0.0f)
         {
             t0 = time;
-            t1 = time + attack + decay + sustain + release;
+            t1 = time + attack_t + decay_t + sustain_t + release_t;
         }
 
         return envelope;
@@ -127,7 +134,7 @@ SawToothWave stw_c6(261.63f);
 RandomNoise rnw(0.001f);
 constexpr float ms2s(float ms) { return ms / 1000.0; }
 Envelope bass_envelope(0.1, 0.1, 0.5, 0.1, -1, true);
-Envelope techno_beat_envelope({ms2s(5), ms2s(50), ms2s(20), ms2s(50), -1, true});
+Envelope techno_beat_envelope({ms2s(5), ms2s(50), ms2s(30), ms2s(50), -1, true});
 
 class Note
 {
@@ -143,10 +150,28 @@ private:
     unsigned id;
 };
 
+class ScopedPaHandler
+{
+public:
+    ScopedPaHandler() : _result(Pa_Initialize()) {}
+    ~ScopedPaHandler()
+    {
+        if (_result == paNoError)
+        {
+            Pa_Terminate();
+        }
+    }
+
+    PaError result() const { return _result; }
+
+private:
+    PaError _result;
+};
+
 class APlay
 {
 public:
-    APlay() : stream(0)
+    APlay() : stream(0), paInit()
     {
         printf("PortAudio. SR = %d, BufSize = %d\n", SAMPLE_RATE, FRAMES_PER_BUFFER);
         sprintf(message, "No Message");
@@ -216,8 +241,27 @@ public:
         return (err == paNoError);
     }
 
+    void paErrorHandle()
+    {
+        fprintf(stderr, "An error occurred while using the portaudio stream\n");
+        fprintf(stderr, "Error number: %d\n", paInit.result());
+        fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(paInit.result()));
+    }
+
     bool start()
     {
+        if (paInit.result() != paNoError)
+        {
+            paErrorHandle();
+            return false;
+        }
+
+        if (!this->open(Pa_GetDefaultOutputDevice()))
+        {
+            paErrorHandle();
+            return false;
+        }
+
         if (stream == 0)
             return false;
 
@@ -236,7 +280,7 @@ public:
         return (err == paNoError);
     }
 
-    std::array<float, SAMPLE_RATE> getWaveBuffer() const { return wavebuf; }
+    std::array<float, SAMPLE_RATE>* getWaveBuffer() { return &wavebuf; }
 
     void playA()
     {
@@ -292,13 +336,7 @@ private:
                 value += note.play(time);
             value /= (float)notes.size();
 
-            // TODO:
-            // float envelope = techno_beat_envelope(time - time_envelope);
-            // if (envelope <= 0.0f)
-            //     time_envelope = time;
-            // float value = (envelope) * (sw_a1(time) + sw_g1(time));
-
-            if (std::fabs(value) > 3.0f)
+            if (std::fabs(value) > 3.0f) // safe guard
             {
                 printf("value = %f\n", value);
                 value = 0.0f;
@@ -349,22 +387,7 @@ private:
     char message[20];
     std::array<float, SAMPLE_RATE> wavebuf;
     std::vector<Note> notes;
+    ScopedPaHandler paInit;
 };
 
-class ScopedPaHandler
-{
-public:
-    ScopedPaHandler() : _result(Pa_Initialize()) {}
-    ~ScopedPaHandler()
-    {
-        if (_result == paNoError)
-        {
-            Pa_Terminate();
-        }
-    }
-
-    PaError result() const { return _result; }
-
-private:
-    PaError _result;
-};
+#endif // APLAY_IMLEMENTATION

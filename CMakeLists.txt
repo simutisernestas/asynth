@@ -3,7 +3,15 @@ project(aplay)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic") # TODO: -Werror
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wpedantic -Werror")
+
+# check if DEBUG env variable is set then set build type to debug otherwise release
+if (DEFINED ENV{DEBUG})
+    set(CMAKE_BUILD_TYPE Debug)
+else()
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 # Find PortAudio
 find_package(PkgConfig REQUIRED)

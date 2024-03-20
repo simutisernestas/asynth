@@ -1,3 +1,6 @@
+#ifndef RAYSIN_IMPLEMENTATION
+#define RAYSIN_IMPLEMENTATION
+
 #include <raylib.h>
 #include <cmath>
 #include <vector>
@@ -19,7 +22,7 @@ public:
         endX = SCREEN_WIDTH;
         zoomLevel = 1.0f;
         numDivisions = 10;
-        waveAmplitude = (SCREEN_HEIGHT * 0.8f) / 2;
+        waveAmplitude = (SCREEN_HEIGHT * 0.3f) / 2;
         waveFrequency = 2.1f;
         lineThickness = 2;
         visibleWidth = SCREEN_WIDTH / zoomLevel;
@@ -41,7 +44,7 @@ public:
         thread.join();
     }
 
-    void setCurrentBuffer(std::array<float, SAMPLE_RATE> buffer) { currentBuffer = buffer; }
+    void setCurrentBuffer(std::array<float, SAMPLE_RATE>* buffer) { currentBuffer = buffer; }
 
 private:
     const int SCREEN_WIDTH;
@@ -60,7 +63,7 @@ private:
     float waveStep;
     int diff;
     const char* letters;
-    std::array<float, SAMPLE_RATE> currentBuffer;
+    std::array<float, SAMPLE_RATE>* currentBuffer;
     std::vector<Vector2> threadsData;
     std::thread thread;
     std::atomic_bool running;
@@ -77,7 +80,9 @@ private:
             draw();
         }
 
-        CloseWindow();
+        // check if window is still open
+        if (IsWindowReady())
+            CloseWindow();
     }
 
     void handleInput()
@@ -89,7 +94,10 @@ private:
             zoomLevel *= 1.05f;
 
         if (IsKeyDown(KEY_Q))
+        {
+            running.store(false);
             CloseWindow();
+        }
 
         if (zoomLevel > 1.0f)
             zoomLevel = 1.0f;
@@ -108,9 +116,9 @@ private:
         for (int i = 0; i < SAMPLE_RATE - 1; i++)
         {
             float x0 = static_cast<float>(i) / SAMPLE_RATE * SCREEN_WIDTH;
-            float y0 = centerY + currentBuffer[i] * waveAmplitude;
+            float y0 = centerY + (*currentBuffer)[i] * waveAmplitude;
             float x1 = static_cast<float>(i + 1) / SAMPLE_RATE * SCREEN_WIDTH;
-            float y1 = centerY + currentBuffer[i + 1] * waveAmplitude;
+            float y1 = centerY + (*currentBuffer)[i + 1] * waveAmplitude;
             DrawLineEx({x0, y0}, {x1, y1}, 1, BLUE);
         }
 
@@ -149,3 +157,5 @@ private:
         EndDrawing();
     }
 };
+
+#endif
