@@ -1,6 +1,7 @@
 #ifndef APLAY_IMLEMENTATION
 #define APLAY_IMLEMENTATION
 
+#include <map>
 #include <cstdio>
 #include <cmath>
 #include <array>
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include "portaudio.h"
 #include "constants.hpp"
+#include "raylib.h"
 
 #define NUM_SECONDS (5)
 #define FRAMES_PER_BUFFER (64)
@@ -45,7 +47,7 @@ struct Envelope
         : attack_t(attack), decay_t(decay), sustain_t(sustain), release_t(release), t0(t0),
           periodic(periodic), sustain_amp(sustain_amp)
     {
-        t1 = t0 + attack + decay + sustain + release;
+        updateDeparture();
     }
 
     float operator()(PaTime time)
@@ -53,7 +55,7 @@ struct Envelope
         if (t0 < 0)
         {
             t0 = time;
-            t1 = time + attack_t + decay_t + sustain_t + release_t;
+            updateDeparture();
         }
 
         PaTime dtime = time - t0;
@@ -72,20 +74,27 @@ struct Envelope
         if (periodic && envelope == 0.0f)
         {
             t0 = time;
-            t1 = time + attack_t + decay_t + sustain_t + release_t;
+            updateDeparture();
         }
 
         return envelope;
     }
 
     bool isAlive(PaTime time) const { return periodic ? true : time < t1; }
+    void updateDeparture() { t1 = t0 + attack_t + decay_t + sustain_t + release_t; }
 };
 
 struct SinWave : public WaveForm
 {
     float frequency;
     SinWave(float frequency) : frequency(frequency) {}
-    float operator()(PaTime time) { return sin(2.0 * M_PI * frequency * time); }
+    float operator()(PaTime time)
+    {
+        // float m_amp = 0.1;
+        // + m_amp * frequency * sin(2.0 * M_PI * 2 * time) // MODULATION inside the sin!
+        // fm_signal = Ac * np.cos(2 * np.pi * fc * t + beta * np.sin(2 * np.pi * fm * t))
+        return sin(2.0 * M_PI * frequency * time);
+    }
 };
 
 struct TriangleWave : public WaveForm
@@ -127,10 +136,6 @@ SinWave sw_a1(55.0f * 4);
 SinWave sw_a6(440.0f);
 SinWave sw_g1(51.91f * 4);
 SawToothWave stw_a1(55.0f);
-// TODO: this is all 4th octave
-SawToothWave stw_a6(440.0f);
-SawToothWave stw_b6(493.88f);
-SawToothWave stw_c6(261.63f);
 RandomNoise rnw(0.001f);
 constexpr float ms2s(float ms) { return ms / 1000.0; }
 Envelope bass_envelope(0.1, 0.1, 0.5, 0.1, -1, true);
@@ -143,6 +148,17 @@ public:
     float play(PaTime time) { return envelope(time) * (*wave)(time); }
     bool isAlive(PaTime time) const { return envelope.isAlive(time); }
     unsigned getID() const { return id; }
+    void incSustainTime(PaTime time)
+    {
+        // TODO: does not work properly !!!
+        // update sustain to that t1 would land at time + .1
+        PaTime new_time = time + .2; // n+C
+        float sn = new_time - envelope.t1;
+        if (sn < 0.0f)
+            return;
+        envelope.sustain_t += sn;
+        envelope.updateDeparture();
+    }
 
 private:
     WaveForm* wave;
@@ -167,6 +183,20 @@ public:
 private:
     PaError _result;
 };
+
+SawToothWave stw_c4(261.63f);
+SawToothWave stw_d4(293.66f);
+SawToothWave stw_e4(329.63f);
+SawToothWave stw_f4(349.23f);
+SawToothWave stw_g4(392.0f);
+SawToothWave stw_a4(440.0f);
+SawToothWave stw_b4(493.88f);
+Envelope stdenv{0.005, 0.1, 0.2, .1, -1};
+std::map<int, Note> key2note_map{
+    {KEY_Z, Note(&stw_c4, stdenv, 1)}, {KEY_X, Note(&stw_d4, stdenv, 2)},
+    {KEY_C, Note(&stw_e4, stdenv, 3)}, {KEY_V, Note(&stw_f4, stdenv, 4)},
+    {KEY_B, Note(&stw_g4, stdenv, 5)}, {KEY_N, Note(&stw_a4, stdenv, 6)},
+    {KEY_M, Note(&stw_b4, stdenv, 7)}};
 
 class APlay
 {
@@ -282,34 +312,29 @@ public:
 
     std::array<float, SAMPLE_RATE>* getWaveBuffer() { return &wavebuf; }
 
-    void playA()
+    void handleKeys(std::vector<int>& keys_down)
     {
-        if (isNotePlaying(1))
-            return;
-        Envelope env(0.005, 0.1, 0.2, .1, -1);
-        Note note1(&stw_a6, env, 1);
-        notes.push_back(note1);
-    }
-
-    void playB()
-    {
-        if (isNotePlaying(2))
-            return;
-        Envelope env(0.005, 0.1, 0.2, .1, -1);
-        Note note2(&stw_b6, env, 2);
-        notes.push_back(note2);
-    }
-
-    void playC()
-    {
-        if (isNotePlaying(3))
-            return;
-        Envelope env(0.005, 0.1, 0.2, .1, -1);
-        Note note3(&stw_c6, env, 3);
-        notes.push_back(note3);
+        for (auto key : keys_down)
+            playNote(key);
     }
 
 private:
+    void playNote(int key)
+    {
+        // TODO: sustain if held
+        // auto note = std::find_if(notes.begin(), notes.end(),
+        //                          [](const Note& note) { return note.getID() == 1; });
+        // PaTime time = Pa_GetStreamTime(stream);
+        // note->incSustainTime(time);
+        // return;
+        auto note = key2note_map.find(key);
+        if (note == key2note_map.end())
+            return;
+        if (isNotePlaying(note->second.getID()))
+            return;
+        notes.push_back(note->second);
+    }
+
     bool isNotePlaying(unsigned id)
     {
         return std::find_if(notes.begin(), notes.end(),

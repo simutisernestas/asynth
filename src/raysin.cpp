@@ -46,6 +46,15 @@ public:
 
     void setCurrentBuffer(std::array<float, SAMPLE_RATE>* buffer) { currentBuffer = buffer; }
 
+    void getPressedKeys(std::vector<int>& keys_pressed)
+    {
+        for (int i = 0; i < 256; i++)
+        {
+            if (IsKeyDown(i))
+                keys_pressed.push_back(i);
+        }
+    }
+
 private:
     const int SCREEN_WIDTH;
     const int SCREEN_HEIGHT;
@@ -127,27 +136,22 @@ private:
                    Fade(LIME, 0.3f));
         DrawText("Time [s]", SCREEN_WIDTH - 80, centerY - 25, 20, WHITE);
 
-        const int NUM_RECTANGLES = 10;
+        const int NUM_RECTANGLES = key2rect.size();
         const int RECTANGLE_WIDTH = SCREEN_WIDTH / NUM_RECTANGLES;
         const int RECTANGLE_HEIGHT = 50;
         const int RECTANGLE_Y = SCREEN_HEIGHT - RECTANGLE_HEIGHT;
         const char* letters = "ABCDEFGHIJ";
 
-        if (IsKeyDown(KEY_Z))
-            DrawRectangle(0, RECTANGLE_Y, RECTANGLE_WIDTH, RECTANGLE_HEIGHT, Fade(LIME, 0.3f));
-        if (IsKeyDown(KEY_X))
-            DrawRectangle(RECTANGLE_WIDTH, RECTANGLE_Y, RECTANGLE_WIDTH, RECTANGLE_HEIGHT,
-                          Fade(LIME, 0.3f));
-        if (IsKeyDown(KEY_C))
-            DrawRectangle(RECTANGLE_WIDTH * 2, RECTANGLE_Y, RECTANGLE_WIDTH, RECTANGLE_HEIGHT,
-                          Fade(LIME, 0.3f));
-
-        for (int i = 0; i < NUM_RECTANGLES; i++)
+        for (auto& [key, rect] : key2rect)
         {
-            int rectangleX = i * RECTANGLE_WIDTH;
+            if (IsKeyDown(key))
+                DrawRectangle(rect * RECTANGLE_WIDTH, RECTANGLE_Y, RECTANGLE_WIDTH,
+                              RECTANGLE_HEIGHT, Fade(LIME, 0.3f));
+
+            int rectangleX = rect * RECTANGLE_WIDTH;
             DrawRectangleLines(rectangleX, RECTANGLE_Y, RECTANGLE_WIDTH, RECTANGLE_HEIGHT,
                                Fade(LIME, 0.3f));
-            const char* the_letter = TextFormat("%c", letters[i]);
+            const char* the_letter = TextFormat("%c", letters[rect]);
             DrawTextEx(GetFontDefault(), the_letter,
                        {static_cast<float>(rectangleX) + RECTANGLE_WIDTH / 2 - 10,
                         static_cast<float>(RECTANGLE_Y) + RECTANGLE_HEIGHT / 2 - 10},
@@ -156,6 +160,9 @@ private:
 
         EndDrawing();
     }
+
+    std::map<int, int> key2rect = {{KEY_Z, 0}, {KEY_X, 1}, {KEY_C, 2}, {KEY_V, 3},
+                                   {KEY_B, 4}, {KEY_N, 5}, {KEY_M, 6}};
 };
 
 #endif

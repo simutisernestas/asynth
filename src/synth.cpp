@@ -27,6 +27,7 @@ public:
     {
         while (true)
         {
+            Pa_Sleep(10);
             handleInput();
             updateGUIAudioBuffer();
         }
@@ -34,12 +35,11 @@ public:
 
     void handleInput()
     {
-        if (IsKeyDown(KEY_Z))
-            aplay.playA();
-        if (IsKeyDown(KEY_X))
-            aplay.playB();
-        if (IsKeyDown(KEY_C))
-            aplay.playC();
+        std::vector<int> keys_pressed;
+        raysin.getPressedKeys(keys_pressed);
+        if (keys_pressed.empty())
+            return;
+        aplay.handleKeys(keys_pressed);
     }
 
     void updateGUIAudioBuffer()
