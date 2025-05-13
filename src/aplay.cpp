@@ -6,6 +6,7 @@
 #include <cmath>
 #include <array>
 #include <vector>
+#include <iostream>
 #include <algorithm>
 #include "portaudio.h"
 #include "constants.hpp"
@@ -136,10 +137,10 @@ SinWave sw_a1(55.0f * 4);
 SinWave sw_a6(440.0f);
 SinWave sw_g1(51.91f * 4);
 SawToothWave stw_a1(55.0f);
-RandomNoise rnw(0.001f);
+RandomNoise rnw(0.0001f);
 constexpr float ms2s(float ms) { return ms / 1000.0; }
 Envelope bass_envelope(0.1, 0.1, 0.5, 0.1, -1, true);
-Envelope techno_beat_envelope({ms2s(5), ms2s(50), ms2s(30), ms2s(50), -1, true});
+Envelope beat_envelope({ms2s(5), ms2s(25), ms2s(10), ms2s(10), -1, false});
 
 class Note
 {
@@ -150,8 +151,6 @@ public:
     unsigned getID() const { return id; }
     void incSustainTime(PaTime time)
     {
-        // TODO: does not work properly !!!
-        // update sustain to that t1 would land at time + .1
         PaTime new_time = time + .2; // n+C
         float sn = new_time - envelope.t1;
         if (sn < 0.0f)
@@ -191,6 +190,7 @@ SawToothWave stw_f4(349.23f);
 SawToothWave stw_g4(392.0f);
 SawToothWave stw_a4(440.0f);
 SawToothWave stw_b4(493.88f);
+SawToothWave stw_b1(61.74f);
 Envelope stdenv{0.005, 0.1, 0.2, .1, -1};
 std::map<int, Note> key2note_map{
     {KEY_Z, Note(&stw_c4, stdenv, 1)}, {KEY_X, Note(&stw_d4, stdenv, 2)},
@@ -206,10 +206,14 @@ public:
         printf("PortAudio. SR = %d, BufSize = %d\n", SAMPLE_RATE, FRAMES_PER_BUFFER);
         sprintf(message, "No Message");
         std::fill(wavebuf.begin(), wavebuf.end(), 0.0f);
+        
+        // Initialize BPM
+        setBPM(150.0f);  // Default 120 BPM
 
-        Note note1(&sw_a1, techno_beat_envelope, 0);
-        Note note2(&sw_g1, techno_beat_envelope, 0);
-        notes.push_back(note1);
+        // Remove the automatic note addition
+        // Note note1(&stw_b1, beat_envelope, 0);
+        // notes.push_back(note1);
+        Note note2(&sw_g1, bass_envelope, 0);
         notes.push_back(note2);
     }
 
@@ -318,21 +322,31 @@ public:
             playNote(key);
     }
 
+    void changeBPM(float newBpm) {
+        if (newBpm > 0) {
+            setBPM(newBpm);
+        }
+    }
+
 private:
     void playNote(int key)
     {
-        // TODO: sustain if held
-        // auto note = std::find_if(notes.begin(), notes.end(),
-        //                          [](const Note& note) { return note.getID() == 1; });
-        // PaTime time = Pa_GetStreamTime(stream);
-        // note->incSustainTime(time);
-        // return;
         auto note = key2note_map.find(key);
         if (note == key2note_map.end())
             return;
-        if (isNotePlaying(note->second.getID()))
-            return;
-        notes.push_back(note->second);
+    
+        auto existingNote = std::find_if(notes.begin(), notes.end(),
+                                         [id = note->second.getID()](const Note& n) 
+                                         { return n.getID() == id; });
+
+        if (existingNote != notes.end()) {
+            PaTime time = Pa_GetStreamTime(stream);
+            existingNote->incSustainTime(time);
+        } else {
+            notes.push_back(note->second);
+        }
+
+        std::cout << "Notes buffer size: " << notes.size() << std::endl;
     }
 
     bool isNotePlaying(unsigned id)
@@ -351,6 +365,15 @@ private:
         /* Prevent unused variable warnings. */
         (void)statusFlags;
         (void)inputBuffer;
+
+        // Check if it's time to add a new beat
+        PaTime currentTime = timeInfo->outputBufferDacTime;
+        if (currentTime - lastBeatTime >= beatInterval) {
+            notes.push_back(Note(&stw_b1, beat_envelope, 0));
+            notes.push_back(Note(&sw_a1, beat_envelope, 0));
+            notes.push_back(Note(&rnw, beat_envelope, 0));
+            lastBeatTime = currentTime;
+        }
 
         for (i = 0; i < framesPerBuffer; i++)
         {
@@ -413,6 +436,15 @@ private:
     std::array<float, SAMPLE_RATE> wavebuf;
     std::vector<Note> notes;
     ScopedPaHandler paInit;
+
+    float bpm = 120.0f;  // Beats per minute, modify as needed
+    PaTime lastBeatTime = 0.0;
+    PaTime beatInterval = 0.0;  // Will be calculated from BPM
+    
+    void setBPM(float newBpm) {
+        bpm = newBpm;
+        beatInterval = 60.0 / bpm;  // Convert BPM to seconds
+    }
 };
 
 #endif // APLAY_IMLEMENTATION

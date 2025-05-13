@@ -6,6 +6,7 @@
 #include <vector>
 #include <array>
 #include <thread>
+#include <map>
 #include <atomic>
 #include <algorithm>
 #include "constants.hpp"
@@ -30,6 +31,8 @@ public:
         waveStep = .1 / zoomLevel;
         diff = static_cast<int>(visibleWidth / waveStep);
         letters = "ABCDEFGHIJ";
+        key2rect = {{KEY_Z, 0}, {KEY_X, 1}, {KEY_C, 2}, {KEY_V, 3},
+                    {KEY_B, 4}, {KEY_N, 5}, {KEY_M, 6}};
     }
 
     void start()
@@ -161,8 +164,7 @@ private:
         EndDrawing();
     }
 
-    std::map<int, int> key2rect = {{KEY_Z, 0}, {KEY_X, 1}, {KEY_C, 2}, {KEY_V, 3},
-                                   {KEY_B, 4}, {KEY_N, 5}, {KEY_M, 6}};
+    std::map<int, int> key2rect;
 };
 
 #endif
